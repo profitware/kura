@@ -1286,6 +1286,8 @@ public class NetworkConfiguration {
             password = (Password) psswdObj;
         } else if (psswdObj instanceof String) {
             password = new Password((String) psswdObj);
+        } else if (psswdObj == null) {
+            password = new Password("");
         } else {
             throw new KuraException(KuraErrorCode.CONFIGURATION_ATTRIBUTE_INVALID, "Invalid password type.", key,
                     psswdObj != null ? psswdObj.getClass() : null);
@@ -1544,14 +1546,19 @@ public class NetworkConfiguration {
         }
     }
 
-    private void populateNetInterfaceConfiguration(
+    public void populateNetInterfaceConfiguration(
             AbstractNetInterface<? extends NetInterfaceAddressConfig> netInterfaceConfig, Map<String, Object> props)
             throws UnknownHostException, KuraException {
         String interfaceName = netInterfaceConfig.getName();
 
         StringBuilder keyBuffer = new StringBuilder();
         keyBuffer.append("net.interface.").append(interfaceName).append(".type");
-        NetInterfaceType interfaceType = NetInterfaceType.valueOf((String) props.get(keyBuffer.toString()));
+        Object type = props.get(keyBuffer.toString());
+        if (type == null) {
+            logger.debug("Interface {} not found in properties.", interfaceName);
+            return;
+        }
+        NetInterfaceType interfaceType = NetInterfaceType.valueOf((String) type);
         logger.trace("Populating interface: {} of type {}", interfaceName, interfaceType);
 
         // build the prefixes for all the properties associated with this interface
@@ -1817,7 +1824,7 @@ public class NetworkConfiguration {
             }
 
             // Common NetInterfaceAddress
-            if (netInterfaceAddress instanceof NetInterfaceAddressImpl) {
+            if (!isDhcpClient4Enabled(props, interfaceName) && netInterfaceAddress instanceof NetInterfaceAddressImpl) {
                 logger.trace("netInterfaceAddress is instanceof NetInterfaceAddressImpl");
                 NetInterfaceAddressImpl netInterfaceAddressImpl = (NetInterfaceAddressImpl) netInterfaceAddress;
 
@@ -1930,13 +1937,8 @@ public class NetworkConfiguration {
 
             // POPULATE NetConfigs
             // dhcp4
-            String configDhcp4 = "net.interface." + interfaceName + ".config.dhcpClient4.enabled";
             NetConfigIP4 netConfigIP4;
-            boolean dhcpEnabled = false;
-            if (props.containsKey(configDhcp4)) {
-                dhcpEnabled = (Boolean) props.get(configDhcp4);
-                logger.trace("DHCP 4 enabled? {}", dhcpEnabled);
-            }
+            boolean dhcpEnabled = isDhcpClient4Enabled(props, interfaceName);
 
             netConfigIP4 = new NetConfigIP4(NetInterfaceStatus.valueOf(configStatus4), autoConnect);
             netConfigs.add(netConfigIP4);
@@ -2248,5 +2250,15 @@ public class NetworkConfiguration {
             }
         }
 
+    }
+
+    private boolean isDhcpClient4Enabled(Map<String, Object> props, String interfaceName) {
+        String configDhcp4 = "net.interface." + interfaceName + ".config.dhcpClient4.enabled";
+        boolean dhcpEnabled = false;
+        if (props.containsKey(configDhcp4)) {
+            dhcpEnabled = (Boolean) props.get(configDhcp4);
+            logger.trace("DHCP 4 enabled? {}", dhcpEnabled);
+        }
+        return dhcpEnabled;
     }
 }

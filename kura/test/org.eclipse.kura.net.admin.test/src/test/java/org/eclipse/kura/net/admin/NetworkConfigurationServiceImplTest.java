@@ -63,7 +63,7 @@ import org.osgi.service.event.Event;
 import org.osgi.service.event.EventAdmin;
 import org.osgi.service.event.EventHandler;
 
-public class NetworkConfigurationServiceimplTest {
+public class NetworkConfigurationServiceImplTest {
 
     @Test
     public void testActivateDeactivate() throws NoSuchFieldException {
@@ -346,26 +346,7 @@ public class NetworkConfigurationServiceimplTest {
         interfaces.add(netInterface);
         when(networkServiceMock.getNetworkInterfaces()).thenReturn(interfaces);
 
-        AtomicBoolean visited = new AtomicBoolean(false);
-        List<NetworkConfigurationVisitor> visitors = new ArrayList<>();
-        NetworkConfigurationVisitor visitor = new NetworkConfigurationVisitor() {
-
-            @Override
-            public void visit(NetworkConfiguration config) throws KuraException {
-                visited.set(true);
-            }
-
-            @Override
-            public void setExecutorService(CommandExecutorService executorService) {
-                // Do nothing...
-            }
-        };
-        visitors.add(visitor);
-        TestUtil.setFieldValue(svc, "readVisitors", visitors);
-
         NetworkConfiguration networkConfiguration = svc.getNetworkConfiguration();
-
-        assertTrue(visited.get());
 
         assertEquals(4, networkConfiguration.getNetInterfaceConfigs().size());
 
@@ -401,21 +382,6 @@ public class NetworkConfigurationServiceimplTest {
         interfaces.add(netInterface);
         when(networkServiceMock.getNetworkInterfaces()).thenReturn(interfaces);
 
-        List<NetworkConfigurationVisitor> visitors = new ArrayList<>();
-        NetworkConfigurationVisitor visitor = new NetworkConfigurationVisitor() {
-
-            @Override
-            public void visit(NetworkConfiguration config) throws KuraException {
-            }
-
-            @Override
-            public void setExecutorService(CommandExecutorService executorService) {
-                // Do nothing...
-            }
-        };
-        visitors.add(visitor);
-        TestUtil.setFieldValue(svc, "readVisitors", visitors);
-
         UsbService usbServiceMock = mock(UsbService.class);
         svc.setUsbService(usbServiceMock);
 
@@ -423,8 +389,6 @@ public class NetworkConfigurationServiceimplTest {
             svc.getConfiguration();
             fail("Exception was expected.");
         } catch (KuraException e) {
-            e = (KuraException) e.getCause();
-            assertEquals(KuraErrorCode.CONFIGURATION_ERROR, e.getCode());
             e = (KuraException) e.getCause();
             assertEquals(KuraErrorCode.CONFIGURATION_UPDATE, e.getCode());
             assertTrue(e.getMessage().endsWith("test"));
@@ -487,23 +451,6 @@ public class NetworkConfigurationServiceimplTest {
         netInterface = new ModemInterfaceImpl("ppp1");
         interfaces.add(netInterface);
         when(networkServiceMock.getNetworkInterfaces()).thenReturn(interfaces);
-
-        AtomicBoolean visited = new AtomicBoolean(false);
-        List<NetworkConfigurationVisitor> visitors = new ArrayList<>();
-        NetworkConfigurationVisitor visitor = new NetworkConfigurationVisitor() {
-
-            @Override
-            public void visit(NetworkConfiguration config) throws KuraException {
-                visited.set(true);
-            }
-
-            @Override
-            public void setExecutorService(CommandExecutorService executorService) {
-                // Do nothing...
-            }
-        };
-        visitors.add(visitor);
-        TestUtil.setFieldValue(svc, "readVisitors", visitors);
 
         UsbService usbServiceMock = mock(UsbService.class);
         svc.setUsbService(usbServiceMock);

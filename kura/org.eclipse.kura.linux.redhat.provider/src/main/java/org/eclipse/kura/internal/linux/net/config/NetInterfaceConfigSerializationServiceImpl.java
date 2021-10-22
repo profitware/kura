@@ -135,7 +135,8 @@ public class NetInterfaceConfigSerializationServiceImpl implements NetInterfaceC
                 if (((NetConfigIP4) netConfig).getStatus() == NetInterfaceStatus.netIPv4StatusL2Only) {
                     logger.debug("new config is Layer 2 Only");
                     sb.append(BOOTPROTO_PROP_NAME).append("=none\n");
-                } else if (((NetConfigIP4) netConfig).isDhcp()) {
+                } else if (((NetConfigIP4) netConfig).isDhcp()
+                        || ((NetConfigIP4) netConfig).getStatus() == NetInterfaceStatus.netIPv4StatusDisabled) {
                     logger.debug("new config is DHCP");
                     sb.append(BOOTPROTO_PROP_NAME).append("=dhcp\n");
                 } else {
@@ -218,7 +219,7 @@ public class NetInterfaceConfigSerializationServiceImpl implements NetInterfaceC
     private void writeConfigFile(String tmpFileName, String dstFileName, StringBuilder sb) throws KuraException {
         File srcFile = new File(tmpFileName);
         File dstFile = new File(dstFileName);
-        
+
         // write tmp configuration file
         try (FileOutputStream fos = new FileOutputStream(srcFile); PrintWriter pw = new PrintWriter(fos)) {
             pw.write(sb.toString());

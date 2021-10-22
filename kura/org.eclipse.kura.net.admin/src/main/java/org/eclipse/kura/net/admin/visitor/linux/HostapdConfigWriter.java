@@ -61,15 +61,10 @@ public class HostapdConfigWriter implements NetworkConfigurationVisitor {
     private static final String KURA_HW_MODE = "KURA_HW_MODE";
     private static final String HOSTAPD_TMP_CONFIG_FILE = "/etc/hostapd.conf.tmp";
 
-    private static HostapdConfigWriter instance;
     private CommandExecutorService executorService;
 
-    public static HostapdConfigWriter getInstance() {
-        if (instance == null) {
-            instance = new HostapdConfigWriter();
-        }
-
-        return instance;
+    public HostapdConfigWriter() {
+        // Do nothing...
     }
 
     @Override
@@ -95,9 +90,6 @@ public class HostapdConfigWriter implements NetworkConfigurationVisitor {
                 writeConfig(netInterfaceConfig);
             }
         }
-
-        // After every visit, unset the executorService. This must be set before every call.
-        this.executorService = null;
     }
 
     private void writeConfig(NetInterfaceConfig<? extends NetInterfaceAddressConfig> netInterfaceConfig)

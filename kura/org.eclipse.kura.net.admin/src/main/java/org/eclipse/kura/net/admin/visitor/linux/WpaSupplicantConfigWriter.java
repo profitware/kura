@@ -25,6 +25,7 @@ import java.util.regex.Matcher;
 import org.apache.commons.io.Charsets;
 import org.eclipse.kura.KuraErrorCode;
 import org.eclipse.kura.KuraException;
+import org.eclipse.kura.KuraIOException;
 import org.eclipse.kura.core.net.AbstractNetInterface;
 import org.eclipse.kura.core.net.NetworkConfiguration;
 import org.eclipse.kura.core.net.NetworkConfigurationVisitor;
@@ -40,7 +41,6 @@ import org.eclipse.kura.net.NetInterfaceAddressConfig;
 import org.eclipse.kura.net.NetInterfaceConfig;
 import org.eclipse.kura.net.NetInterfaceStatus;
 import org.eclipse.kura.net.NetInterfaceType;
-import org.eclipse.kura.net.admin.visitor.linux.util.KuranetConfig;
 import org.eclipse.kura.net.admin.visitor.linux.util.WpaSupplicantUtil;
 import org.eclipse.kura.net.wifi.WifiCiphers;
 import org.eclipse.kura.net.wifi.WifiConfig;
@@ -64,15 +64,10 @@ public class WpaSupplicantConfigWriter implements NetworkConfigurationVisitor {
 
     private static final String HEXES = "0123456789ABCDEF";
 
-    private static WpaSupplicantConfigWriter instance;
     private CommandExecutorService executorService;
 
-    public static WpaSupplicantConfigWriter getInstance() {
-        if (instance == null) {
-            instance = new WpaSupplicantConfigWriter();
-        }
-
-        return instance;
+    public WpaSupplicantConfigWriter() {
+        // Do nothing...
     }
 
     @Override
@@ -103,7 +98,7 @@ public class WpaSupplicantConfigWriter implements NetworkConfigurationVisitor {
         try {
             generateWpaSupplicantConf(wifiConfig, interfaceName, TMP_WPA_CONFIG_FILE);
         } catch (Exception e) {
-            throw new KuraException(KuraErrorCode.INTERNAL_ERROR, e);
+            throw new KuraIOException(e);
         }
     }
 
@@ -127,13 +122,7 @@ public class WpaSupplicantConfigWriter implements NetworkConfigurationVisitor {
 
     protected String readResource(String path) throws IOException {
         Bundle bundle = FrameworkUtil.getBundle(getClass());
-        String s = IOUtil.readResource(bundle, path);
-
-        return s;
-    }
-
-    protected void setKuranetProperty(String key, String value) throws IOException, KuraException {
-        KuranetConfig.setProperty(key, value);
+        return IOUtil.readResource(bundle, path);
     }
 
     private void writeConfig(NetInterfaceConfig<? extends NetInterfaceAddressConfig> netInterfaceConfig)
@@ -187,21 +176,6 @@ public class WpaSupplicantConfigWriter implements NetworkConfigurationVisitor {
 
         if (wifiMode == WifiMode.INFRA) {
             if (infraConfig != null) {
-                StringBuilder key = new StringBuilder().append("net.interface.").append(interfaceName)
-                        .append(".config.wifi.infra.pingAccessPoint");
-                try {
-                    setKuranetProperty(key.toString(), Boolean.toString(infraConfig.pingAccessPoint()));
-                } catch (IOException e) {
-                    logger.warn("Error setting KuranetConfig property", e);
-                }
-
-                key = new StringBuilder().append("net.interface.").append(interfaceName)
-                        .append(".config.wifi.infra.ignoreSSID");
-                try {
-                    setKuranetProperty(key.toString(), Boolean.toString(infraConfig.ignoreSSID()));
-                } catch (IOException e) {
-                    logger.warn("Error setting KuranetConfig property", e);
-                }
                 wpaSupplicantConfig = infraConfig;
             } else {
                 logger.debug("Not updating wpa_supplicant config - wifi mode is {} but the infra config is null",
@@ -249,16 +223,6 @@ public class WpaSupplicantConfigWriter implements NetworkConfigurationVisitor {
             throws KuraException, IOException {
 
         logger.debug("Generating WPA Supplicant Config");
-
-        logger.debug("Store wifiMode driver: {}", wifiConfig.getDriver());
-        StringBuilder key = new StringBuilder("net.interface." + interfaceName + ".config.wifi."
-                + wifiConfig.getMode().toString().toLowerCase() + ".driver");
-        try {
-            setKuranetProperty(key.toString(), wifiConfig.getDriver());
-        } catch (Exception e) {
-            logger.error("Failed to save kuranet config", e);
-            throw KuraException.internalError(e);
-        }
 
         String fileAsString;
         if (wifiConfig.getSecurity() == WifiSecurity.SECURITY_WEP) {
@@ -428,25 +392,29 @@ public class WpaSupplicantConfigWriter implements NetworkConfigurationVisitor {
         command.setErrorStream(new ByteArrayOutputStream());
         command.setTimeout(60);
 
-        CommandStatus status = this.executorService.execute(command);
-        if (status.getExitStatus().isSuccessful()) {
-            String networkConfig = new String(((ByteArrayOutputStream) status.getOutputStream()).toByteArray(),
-                    Charsets.UTF_8);
+        if (this.executorService != null) {
+            CommandStatus status = this.executorService.execute(command);
+            if (status.getExitStatus().isSuccessful()) {
+                String networkConfig = new String(((ByteArrayOutputStream) status.getOutputStream()).toByteArray(),
+                        Charsets.UTF_8);
 
-            String[] networkConfigLines = networkConfig.split("\n");
+                String[] networkConfigLines = networkConfig.split("\n");
 
-            String encodedPsk = "";
-            for (String line : networkConfigLines) {
-                String trimmedLine = line.trim();
-                if (trimmedLine.startsWith("psk=")) {
-                    encodedPsk = trimmedLine.split("=")[1];
-                    break;
+                String encodedPsk = "";
+                for (String line : networkConfigLines) {
+                    String trimmedLine = line.trim();
+                    if (trimmedLine.startsWith("psk=")) {
+                        encodedPsk = trimmedLine.split("=")[1];
+                        break;
+                    }
                 }
-            }
 
-            return encodedPsk;
+                return encodedPsk;
+            } else {
+                throw new KuraException(KuraErrorCode.OS_COMMAND_ERROR);
+            }
         } else {
-            throw new KuraException(KuraErrorCode.OS_COMMAND_ERROR);
+            throw new KuraException(KuraErrorCode.OS_COMMAND_ERROR, "The command executor is not set");
         }
 
     }

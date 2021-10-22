@@ -40,7 +40,12 @@ public class GwtModemInterfaceConfig extends GwtNetInterfaceConfig {
     }
 
     public int getPppNum() {
-        return ((Integer) get("pppNum")).intValue();
+        Object pppNum = get("pppNum");
+        if (pppNum != null) {
+            return ((Integer) pppNum).intValue();
+        } else {
+            return 0;
+        }
     }
 
     public void setPppNum(int pppNum) {
