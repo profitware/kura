@@ -335,15 +335,7 @@ public class NetInterfaceConfigSerializationServiceImpl implements NetInterfaceC
             return;
         }
 
-        // found our match so load the properties
-        try (FileInputStream fis = new FileInputStream(kuraFile); Scanner scanner = new Scanner(fis)) {
-            // need to loop through the existing file and replace only the desired interface
-            while (scanner.hasNextLine()) {
-                appendConfig = scanLine(netInterfaceConfig, sb, iName, scanner);
-            }
-        } catch (IOException e) {
-            throw new KuraIOException(e, "Debian config file is not found");
-        }
+        appendConfig = readAndReplaceConfig(netInterfaceConfig, sb, kuraFile, iName);
 
         // If config not present in file, append to end
         if (appendConfig) {
@@ -354,54 +346,53 @@ public class NetInterfaceConfigSerializationServiceImpl implements NetInterfaceC
         writeConfigFile(DEBIAN_TMP_NET_CONFIGURATION_FILE, DEBIAN_NET_CONFIGURATION_FILE, sb);
     }
 
-    private boolean scanLine(NetInterfaceConfig<? extends NetInterfaceAddressConfig> netInterfaceConfig,
-            StringBuilder sb, String iName, Scanner scanner) {
+    @SuppressWarnings("checkstyle:innerAssignment")
+    private boolean readAndReplaceConfig(NetInterfaceConfig<? extends NetInterfaceAddressConfig> netInterfaceConfig,
+            StringBuilder sb, File kuraFile, String iName) throws KuraIOException {
         boolean appendConfig = true;
-        String noTrimLine = scanner.nextLine();
-        String line = noTrimLine.trim();
-        // ignore comments and blank lines
-        if (!line.isEmpty()) {
-            if (line.startsWith("#!kura!")) {
-                line = line.substring("#!kura!".length());
-            }
+        // found our match so load the properties
+        try (FileInputStream fis = new FileInputStream(kuraFile); Scanner scanner = new Scanner(fis)) {
+            // need to loop through the existing file and replace only the desired interface
+            while (scanner.hasNextLine()) {
+                String noTrimLine = scanner.nextLine();
+                String line = noTrimLine.trim();
+                // ignore comments and blank lines
+                if (!line.isEmpty()) {
+                    if (line.startsWith("#!kura!")) {
+                        line = line.substring("#!kura!".length());
+                    }
 
-            if (!line.startsWith("#")) {
-                String[] args = line.split("\\s+");
-                // must be a line stating that interface starts on boot
-                if (args.length > 1) {
-                    if (args[1].equals(iName)) {
-                        appendConfig = appendDebianInterfaceCommandOptions(netInterfaceConfig, sb, iName, scanner);
+                    if (!line.startsWith("#")) {
+                        String[] args = line.split("\\s+");
+                        // must be a line stating that interface starts on boot
+                        if (args.length > 1) {
+                            if (args[1].equals(iName)) {
+                                logger.debug("Found entry in interface file...");
+                                appendConfig = false;
+                                sb.append(debianWriteUtility(netInterfaceConfig, iName));
+
+                                // append Debian interface command options
+                                while (scanner.hasNextLine() && !(line = scanner.nextLine().trim()).isEmpty()) {
+                                    if (isDebianInterfaceCommandOption(line)) {
+                                        sb.append("\t").append(line).append("\n");
+                                    }
+                                }
+                                if (!sb.toString().endsWith("\n\n")) {
+                                    sb.append("\n");
+                                }
+                            } else {
+                                sb.append(noTrimLine + "\n");
+                            }
+                        }
                     } else {
                         sb.append(noTrimLine + "\n");
                     }
+                } else {
+                    sb.append(noTrimLine + "\n");
                 }
-            } else {
-                sb.append(noTrimLine + "\n");
             }
-        } else {
-            sb.append(noTrimLine + "\n");
-        }
-        return appendConfig;
-    }
-
-    @SuppressWarnings("checkstyle:innerAssignment")
-    private boolean appendDebianInterfaceCommandOptions(
-            NetInterfaceConfig<? extends NetInterfaceAddressConfig> netInterfaceConfig, StringBuilder sb, String iName,
-            Scanner scanner) {
-        boolean appendConfig;
-        String line;
-        logger.debug("Found entry in interface file...");
-        appendConfig = false;
-        sb.append(debianWriteUtility(netInterfaceConfig, iName));
-
-        // append Debian interface command options
-        while (scanner.hasNextLine() && !(line = scanner.nextLine().trim()).isEmpty()) {
-            if (isDebianInterfaceCommandOption(line)) {
-                sb.append("\t").append(line).append("\n");
-            }
-        }
-        if (!sb.toString().endsWith("\n\n")) {
-            sb.append("\n");
+        } catch (IOException e) {
+            throw new KuraIOException(e, "Debian config file is not found");
         }
         return appendConfig;
     }
