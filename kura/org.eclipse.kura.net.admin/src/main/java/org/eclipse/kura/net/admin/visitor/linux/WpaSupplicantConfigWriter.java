@@ -91,10 +91,10 @@ public class WpaSupplicantConfigWriter implements NetworkConfigurationVisitor {
 
     }
 
-    public void generateTempWpaSupplicantConf(WifiConfig wifiConfig, String interfaceName) throws KuraException {
+    public void generateTempWpaSupplicantConf(WifiConfig wifiConfig) throws KuraException {
 
         try {
-            generateWpaSupplicantConf(wifiConfig, interfaceName, TMP_WPA_CONFIG_FILE);
+            generateWpaSupplicantConf(wifiConfig, TMP_WPA_CONFIG_FILE);
         } catch (Exception e) {
             throw new KuraIOException(e);
         }

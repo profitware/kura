@@ -68,8 +68,12 @@ import org.eclipse.kura.net.wifi.WifiInterfaceAddressConfig;
 import org.eclipse.kura.net.wifi.WifiMode;
 import org.eclipse.kura.net.wifi.WifiRadioMode;
 import org.eclipse.kura.net.wifi.WifiSecurity;
+import org.eclipse.kura.system.SystemService;
 import org.eclipse.kura.usb.UsbDevice;
 import org.eclipse.kura.usb.UsbNetDevice;
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.FrameworkUtil;
+import org.osgi.framework.ServiceReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -86,6 +90,12 @@ public class NetworkConfiguration {
     public NetworkConfiguration() {
         logger.debug("Created empty NetworkConfiguration");
         this.netInterfaceConfigs = new HashMap<>();
+    }
+
+    protected SystemService getSystemService() {
+        BundleContext context = FrameworkUtil.getBundle(NetworkConfiguration.class).getBundleContext();
+        ServiceReference<SystemService> systemServiceSR = context.getServiceReference(SystemService.class);
+        return context.getService(systemServiceSR);
     }
 
     /**
@@ -1796,9 +1806,15 @@ public class NetworkConfiguration {
         String configStatus4Key = "net.interface." + interfaceName + ".config.ip4.status";
         if (props.containsKey(configStatus4Key)) {
             configStatus4 = (String) props.get(configStatus4Key);
-        }
-        if (configStatus4 == null) {
+        } else {
             configStatus4 = NetInterfaceStatus.netIPv4StatusDisabled.name();
+            if ((netInterfaceConfig instanceof EthernetInterfaceConfigImpl
+                    || netInterfaceConfig instanceof WifiInterfaceConfigImpl) && netInterfaceConfig.isVirtual()) {
+                SystemService service = getSystemService();
+                if (service != null) {
+                    configStatus4 = NetInterfaceStatus.valueOf(service.getNetVirtualDevicesConfig()).name();
+                }
+            }
         }
         logger.trace("Status Ipv4? {}", configStatus4);
 

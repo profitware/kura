@@ -1266,7 +1266,7 @@ public class NetworkAdminServiceImpl implements NetworkAdminService, EventHandle
                 manageDhcpServer(ifaceName, false);
                 disableWifiInterface(ifaceName);
 
-                wpaSupplicantConfigWriter.generateTempWpaSupplicantConf(wifiConfig, ifaceName);
+                wpaSupplicantConfigWriter.generateTempWpaSupplicantConf(wifiConfig);
 
                 logger.debug("verifyWifiCredentials() :: Starting temporary instance of wpa_supplicant");
                 this.wpaSupplicantManager.startTemp(ifaceName, wifiConfig.getDriver());

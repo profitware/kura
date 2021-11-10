@@ -59,6 +59,7 @@ import org.eclipse.kura.net.wifi.WifiBgscanModule;
 import org.eclipse.kura.net.wifi.WifiCiphers;
 import org.eclipse.kura.net.wifi.WifiConfig;
 import org.eclipse.kura.net.wifi.WifiInterface.Capability;
+import org.eclipse.kura.system.SystemService;
 import org.eclipse.kura.net.wifi.WifiInterfaceAddressConfig;
 import org.eclipse.kura.net.wifi.WifiMode;
 import org.eclipse.kura.net.wifi.WifiRadioMode;
@@ -68,6 +69,9 @@ import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 import org.mockito.Mockito;
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.FrameworkUtil;
+import org.osgi.framework.ServiceReference;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class NetworkConfigurationTest {
@@ -209,7 +213,8 @@ public class NetworkConfigurationTest {
 
     @Test
     public void testAccept() throws KuraException {
-        NetworkConfiguration config = new NetworkConfiguration();
+        NetworkConfiguration config = getNetworkConfiguration();
+
         NetworkConfigurationVisitor visitor = mock(NetworkConfigurationVisitor.class);
 
         Mockito.doNothing().when(visitor).visit(any(NetworkConfiguration.class));
@@ -2479,5 +2484,18 @@ public class NetworkConfigurationTest {
                 assertEquals("Key: " + key, expectedValue, actualValue);
             }
         }
+    }
+
+    private NetworkConfiguration getNetworkConfiguration() {
+        SystemService ssMock = mock(SystemService.class);
+        when(ssMock.getNetVirtualDevicesConfig()).thenReturn("netIPv4StatusDisabled");
+        NetworkConfiguration config = new NetworkConfiguration() {
+
+            @Override
+            protected SystemService getSystemService() {
+                return ssMock;
+            }
+        };
+        return config;
     }
 }
