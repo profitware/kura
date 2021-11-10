@@ -154,10 +154,9 @@ public class WpaSupplicantConfigWriter implements NetworkConfigurationVisitor {
                 }
             }
 
-            if (netInterfaceStatus == NetInterfaceStatus.netIPv4StatusDisabled
-                    || netInterfaceStatus == NetInterfaceStatus.netIPv4StatusUnmanaged) {
-                logger.info("Network interface status for {} is {} - not overwriting wpaconfig file", interfaceName,
-                        netInterfaceStatus);
+            if (!((AbstractNetInterface<?>) netInterfaceConfig).isInterfaceEnabled()) {
+                logger.info("Network interface status for {} is {} - not overwriting hostapd configuration file",
+                        interfaceName, ((AbstractNetInterface<?>) netInterfaceConfig).getInterfaceStatus());
                 return;
             }
 

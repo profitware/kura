@@ -325,9 +325,16 @@ public class NetInterfaceConfigSerializationServiceImpl implements NetInterfaceC
 
     private void writeDebianConfig(NetInterfaceConfig<? extends NetInterfaceAddressConfig> netInterfaceConfig)
             throws KuraException {
+        String iName = netInterfaceConfig.getName();
+        NetConfigIP4 netConfigIP4 = ((AbstractNetInterface<?>) netInterfaceConfig).getIP4config();
+        if (netConfigIP4 == null) {
+            logger.warn("The configuration for interface {} in empty", iName);
+            return;
+        }
+
+        boolean isLoopback = netInterfaceConfig.getType() == NetInterfaceType.LOOPBACK;
         StringBuilder sb = new StringBuilder();
         File kuraFile = getIfcfgFile();
-        String iName = netInterfaceConfig.getName();
         boolean appendConfig = true;
 
         if (!kuraFile.exists()) {
@@ -335,11 +342,11 @@ public class NetInterfaceConfigSerializationServiceImpl implements NetInterfaceC
             return;
         }
 
-        appendConfig = readAndReplaceConfig(netInterfaceConfig, sb, kuraFile, iName);
+        appendConfig = readAndReplaceConfig(netConfigIP4, sb, kuraFile, iName, isLoopback);
 
         // If config not present in file, append to end
         if (appendConfig) {
-            appendNetworkInterfaceConfig(netInterfaceConfig, sb, iName);
+            appendNetworkInterfaceConfig(netConfigIP4, sb, iName, isLoopback);
         }
 
         // write configuration file
@@ -347,8 +354,8 @@ public class NetInterfaceConfigSerializationServiceImpl implements NetInterfaceC
     }
 
     @SuppressWarnings("checkstyle:innerAssignment")
-    private boolean readAndReplaceConfig(NetInterfaceConfig<? extends NetInterfaceAddressConfig> netInterfaceConfig,
-            StringBuilder sb, File kuraFile, String iName) throws KuraIOException {
+    private boolean readAndReplaceConfig(NetConfigIP4 netConfigIP4, StringBuilder sb, File kuraFile, String iName,
+            boolean isLoopback) throws KuraIOException {
         boolean appendConfig = true;
         // found our match so load the properties
         try (FileInputStream fis = new FileInputStream(kuraFile); Scanner scanner = new Scanner(fis)) {
@@ -369,7 +376,7 @@ public class NetInterfaceConfigSerializationServiceImpl implements NetInterfaceC
                             if (args[1].equals(iName)) {
                                 logger.debug("Found entry in interface file...");
                                 appendConfig = false;
-                                sb.append(debianWriteUtility(netInterfaceConfig, iName));
+                                sb.append(debianWriteUtility(netConfigIP4, iName, isLoopback));
 
                                 // append Debian interface command options
                                 while (scanner.hasNextLine() && !(line = scanner.nextLine().trim()).isEmpty()) {
@@ -397,16 +404,15 @@ public class NetInterfaceConfigSerializationServiceImpl implements NetInterfaceC
         return appendConfig;
     }
 
-    private void appendNetworkInterfaceConfig(
-            NetInterfaceConfig<? extends NetInterfaceAddressConfig> netInterfaceConfig, StringBuilder sb,
-            String iName) {
+    private void appendNetworkInterfaceConfig(NetConfigIP4 netConfigIP4, StringBuilder sb, String iName,
+            boolean isLoopback) {
         logger.debug("Appending entry to interface file...");
         // append an empty line if not there
         String s = sb.toString();
         if (!"\\n".equals(s.substring(s.length() - 1))) {
             sb.append("\n");
         }
-        sb.append(debianWriteUtility(netInterfaceConfig, iName));
+        sb.append(debianWriteUtility(netConfigIP4, iName, isLoopback));
         sb.append("\n");
     }
 
@@ -442,28 +448,15 @@ public class NetInterfaceConfigSerializationServiceImpl implements NetInterfaceC
         }
     }
 
-    private String debianWriteUtility(NetInterfaceConfig<? extends NetInterfaceAddressConfig> netInterfaceConfig,
-            String interfaceName) {
+    private String debianWriteUtility(NetConfigIP4 netConfigIP4, String interfaceName, boolean isLoopback) {
         StringBuilder sb = new StringBuilder();
-        List<NetConfig> netConfigs = ((AbstractNetInterface<?>) netInterfaceConfig).getNetConfigs();
-        if (netConfigs == null) {
-            logger.debug("debianWriteUtility() :: netConfigs is null");
-            return sb.toString();
-        }
-        for (NetConfig netConfig : netConfigs) {
-            if (!(netConfig instanceof NetConfigIP4)) {
-                continue;
-            }
-            logger.debug("Writing netconfig {} for {}", netConfig.getClass(), interfaceName);
+        logger.debug("Writing netconfig {} for {}", netConfigIP4.getClass(), interfaceName);
 
-            NetConfigIP4 netConfigIP4 = (NetConfigIP4) netConfig;
-
-            setOnBootProperty(interfaceName, sb, netConfigIP4);
-            setBootprotoProperty(netInterfaceConfig, interfaceName, sb, netConfigIP4);
-            setDnsProperty(sb, netConfigIP4);
-            if (!"\n".equals(sb.toString().substring(sb.toString().length() - 1))) {
-                sb.append("\n");
-            }
+        setOnBootProperty(interfaceName, sb, netConfigIP4);
+        setBootprotoProperty(netConfigIP4, interfaceName, sb, isLoopback);
+        setDnsProperty(sb, netConfigIP4);
+        if (!"\n".equals(sb.toString().substring(sb.toString().length() - 1))) {
+            sb.append("\n");
         }
 
         return sb.toString();
@@ -498,8 +491,8 @@ public class NetInterfaceConfigSerializationServiceImpl implements NetInterfaceC
         }
     }
 
-    private void setBootprotoProperty(NetInterfaceConfig<? extends NetInterfaceAddressConfig> netInterfaceConfig,
-            String interfaceName, StringBuilder sb, NetConfigIP4 netConfigIP4) {
+    private void setBootprotoProperty(NetConfigIP4 netConfigIP4, String interfaceName, StringBuilder sb,
+            boolean isLoopback) {
         // BOOTPROTO
         sb.append("iface " + interfaceName + " inet ");
         switch (netConfigIP4.getStatus()) {
@@ -519,7 +512,7 @@ public class NetInterfaceConfigSerializationServiceImpl implements NetInterfaceC
                 // delete default route if configured as LAN
                 sb.append("\t post-up ").append(REMOVE_ROUTE_COMMAND).append("\n");
             } else {
-                setStaticAddressConfig(netInterfaceConfig, interfaceName, sb, netConfigIP4);
+                setStaticAddressConfig(netConfigIP4, interfaceName, sb, isLoopback);
             }
             break;
         case netIPv4StatusEnabledWAN:
@@ -527,7 +520,7 @@ public class NetInterfaceConfigSerializationServiceImpl implements NetInterfaceC
                 logger.debug("new config is DHCP for {}", interfaceName);
                 sb.append(DHCP);
             } else {
-                setStaticAddressConfig(netInterfaceConfig, interfaceName, sb, netConfigIP4);
+                setStaticAddressConfig(netConfigIP4, interfaceName, sb, isLoopback);
             }
             break;
         case netIPv4StatusUnmanaged:
@@ -538,16 +531,19 @@ public class NetInterfaceConfigSerializationServiceImpl implements NetInterfaceC
 
     private void setOnBootProperty(String interfaceName, StringBuilder sb, NetConfigIP4 netConfigIP4) {
         // ONBOOT
-        if (netConfigIP4.isAutoConnect()) {
+        if ((netConfigIP4.getStatus() == NetInterfaceStatus.netIPv4StatusEnabledLAN
+                || netConfigIP4.getStatus() == NetInterfaceStatus.netIPv4StatusEnabledWAN
+                || netConfigIP4.getStatus() == NetInterfaceStatus.netIPv4StatusL2Only)
+                && netConfigIP4.isAutoConnect()) {
             sb.append("auto " + interfaceName + "\n");
         }
     }
 
     @SuppressWarnings("checkstyle:todoComment")
-    private void setStaticAddressConfig(NetInterfaceConfig<? extends NetInterfaceAddressConfig> netInterfaceConfig,
-            String interfaceName, StringBuilder sb, NetConfigIP4 netConfigIP4) {
+    private void setStaticAddressConfig(NetConfigIP4 netConfigIP4, String interfaceName, StringBuilder sb,
+            boolean isLoopback) {
         // in Debian, loopback interface cannot have assigned a static address
-        if (netInterfaceConfig.getType() == NetInterfaceType.LOOPBACK) {
+        if (isLoopback) {
             sb.append("loopback\n");
         } else {
 

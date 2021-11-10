@@ -30,10 +30,8 @@ import org.eclipse.kura.core.util.IOUtil;
 import org.eclipse.kura.executor.CommandExecutorService;
 import org.eclipse.kura.linux.net.wifi.HostapdManager;
 import org.eclipse.kura.net.NetConfig;
-import org.eclipse.kura.net.NetConfigIP4;
 import org.eclipse.kura.net.NetInterfaceAddressConfig;
 import org.eclipse.kura.net.NetInterfaceConfig;
-import org.eclipse.kura.net.NetInterfaceStatus;
 import org.eclipse.kura.net.NetInterfaceType;
 import org.eclipse.kura.net.wifi.WifiCiphers;
 import org.eclipse.kura.net.wifi.WifiConfig;
@@ -104,10 +102,9 @@ public class HostapdConfigWriter implements NetworkConfigurationVisitor {
         }
         String interfaceName = netInterfaceConfig.getName();
         WifiConfig apConfig = getAccessPointConfig(netConfigs);
-        NetInterfaceStatus netInterfaceStatus = getNetInterfaceStatus(netConfigs);
-        if (!isInterfaceEnabled(netInterfaceStatus)) {
+        if (!((AbstractNetInterface<?>) netInterfaceConfig).isInterfaceEnabled()) {
             logger.info("Network interface status for {} is {} - not overwriting hostapd configuration file",
-                    interfaceName, netInterfaceStatus);
+                    interfaceName, ((AbstractNetInterface<?>) netInterfaceConfig).getInterfaceStatus());
             return;
         }
         if (apConfig != null) {
@@ -118,12 +115,6 @@ public class HostapdConfigWriter implements NetworkConfigurationVisitor {
                 throw KuraException.internalError(e);
             }
         }
-    }
-
-    private boolean isInterfaceEnabled(NetInterfaceStatus status) {
-        return NetInterfaceStatus.netIPv4StatusL2Only.equals(status)
-                || NetInterfaceStatus.netIPv4StatusEnabledLAN.equals(status)
-                || NetInterfaceStatus.netIPv4StatusEnabledWAN.equals(status);
     }
 
     private WifiConfig getAccessPointConfig(List<NetConfig> netConfigs) {
@@ -138,20 +129,6 @@ public class HostapdConfigWriter implements NetworkConfigurationVisitor {
             }
         }
         return apConfig;
-    }
-
-    private NetInterfaceStatus getNetInterfaceStatus(List<NetConfig> netConfigs) {
-        if (netConfigs == null) {
-            return NetInterfaceStatus.netIPv4StatusDisabled;
-        }
-        NetInterfaceStatus status = NetInterfaceStatus.netIPv4StatusDisabled;
-        for (NetConfig netConfig : netConfigs) {
-            if (netConfig instanceof NetConfigIP4) {
-                status = ((NetConfigIP4) netConfig).getStatus();
-                break;
-            }
-        }
-        return status;
     }
 
     private void generateHostapdConf(WifiConfig wifiConfig, String interfaceName) throws KuraException, IOException {

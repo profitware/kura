@@ -19,6 +19,7 @@ import java.util.Optional;
 
 import org.eclipse.kura.KuraException;
 import org.eclipse.kura.KuraIOException;
+import org.eclipse.kura.core.net.AbstractNetInterface;
 import org.eclipse.kura.core.net.NetworkConfiguration;
 import org.eclipse.kura.core.net.NetworkConfigurationVisitor;
 import org.eclipse.kura.core.net.modem.ModemInterfaceConfigImpl;
@@ -90,28 +91,23 @@ public class PppConfigWriter implements NetworkConfigurationVisitor {
         }
     }
 
-    @SuppressWarnings("checkstyle:methodLength")
     private void writeConfig(ModemInterfaceConfigImpl modemInterfaceConfig) throws KuraException {
         String oldInterfaceName = modemInterfaceConfig.getName();
         String newInterfaceName = modemInterfaceConfig.getName();
 
-        // Get the config
-        ModemConfig modemConfig = null;
-
-        List<NetConfig> netConfigs = modemInterfaceConfig.getNetConfigs();
-        Optional<NetConfig> netConfig = netConfigs.stream().filter(ModemConfig.class::isInstance).findFirst();
-        if (netConfig.isPresent()) {
-            modemConfig = (ModemConfig) netConfig.get();
+        if (!((AbstractNetInterface<?>) modemInterfaceConfig).isInterfaceEnabled()) {
+            logger.info("Network interface status for {} is {} - not overwriting hostapd configuration file",
+                    oldInterfaceName, ((AbstractNetInterface<?>) modemInterfaceConfig).getInterfaceStatus());
+            return;
         }
 
+        ModemConfig modemConfig = getModemConfig(modemInterfaceConfig);
+
         // Use the ppp number for the interface name, if configured
-        int pppNum = -1;
-        if (modemConfig != null) {
-            pppNum = modemConfig.getPppNumber();
-            if (pppNum >= 0) {
-                newInterfaceName = "ppp" + pppNum;
-                modemInterfaceConfig.setName(newInterfaceName);
-            }
+        int pppNumber = getPppNumber(modemConfig);
+        if (pppNumber >= 0) {
+            newInterfaceName = "ppp" + pppNumber;
+            modemInterfaceConfig.setName(newInterfaceName);
         }
 
         // Save the status and priority
@@ -128,12 +124,59 @@ public class PppConfigWriter implements NetworkConfigurationVisitor {
         }
 
         String pppPeerFilename = formPeerFilename(usbDevice);
-        String pppLogfile = formPppLogFilename(usbDevice);
-        String chatFilename = formChatFilename(usbDevice);
-        String disconnectFilename = formDisconnectFilename(usbDevice);
-        String chapAuthSecretsFilename = formChapAuthSecretsFilename();
-        String papAuthSecretsFilename = formPapAuthSecretsFilename();
+        removeOldSymbolicLinks(oldInterfaceName, newInterfaceName, pppPeerFilename);
 
+        if (configClass != null) {
+            writePppConfigFiles(modemConfig, pppNumber, configClass, usbDevice, baudRate);
+        }
+    }
+
+    private void writePppConfigFiles(ModemConfig modemConfig, int pppNumber,
+            Class<? extends ModemPppConfigGenerator> configClass, UsbDevice usbDevice, int baudRate) {
+        try {
+            String pppPeerFilename = formPeerFilename(usbDevice);
+            String pppLogfile = formPppLogFilename(usbDevice);
+            String chatFilename = formChatFilename(usbDevice);
+            String disconnectFilename = formDisconnectFilename(usbDevice);
+            String chapAuthSecretsFilename = formChapAuthSecretsFilename();
+            String papAuthSecretsFilename = formPapAuthSecretsFilename();
+            ModemPppConfigGenerator scriptGenerator = configClass.newInstance();
+
+            if (modemConfig != null) {
+                logger.debug("Writing connect scripts for ppp{} using {}", pppNumber, configClass);
+
+                logger.debug(WRITING, pppPeerFilename);
+                PppPeer pppPeer = scriptGenerator.getPppPeer(getDeviceId(usbDevice), modemConfig, pppLogfile,
+                        chatFilename, disconnectFilename);
+                pppPeer.setBaudRate(baudRate);
+                pppPeer.write(pppPeerFilename, chapAuthSecretsFilename, papAuthSecretsFilename);
+
+                if (pppNumber >= 0) {
+                    logger.debug("Linking peer file using ppp number: {}", pppNumber);
+                    String symlinkFilename = formPeerLinkAbsoluteName(pppNumber);
+                    LinuxFileUtil.createSymbolicLink(pppPeerFilename, symlinkFilename);
+                } else {
+                    logger.error("Can't create symbolic link to {}, invalid ppp number: {}", pppPeerFilename,
+                            pppNumber);
+                }
+
+                logger.debug(WRITING, chatFilename);
+                ModemXchangeScript connectScript = scriptGenerator.getConnectScript(modemConfig);
+                connectScript.writeScript(chatFilename);
+
+                logger.debug(WRITING, disconnectFilename);
+                ModemXchangeScript disconnectScript = scriptGenerator.getDisconnectScript(modemConfig);
+                disconnectScript.writeScript(disconnectFilename);
+            } else {
+                logger.error("Error writing connect scripts - modemConfig is null");
+            }
+        } catch (Exception e) {
+            logger.error("Could not write modem config", e);
+        }
+    }
+
+    private void removeOldSymbolicLinks(String oldInterfaceName, String newInterfaceName, String pppPeerFilename)
+            throws KuraIOException {
         // Cleanup values associated with the old name if the interface name has changed
         if (!oldInterfaceName.equals(newInterfaceName)) {
             try {
@@ -144,44 +187,25 @@ public class PppConfigWriter implements NetworkConfigurationVisitor {
                 throw new KuraIOException(e);
             }
         }
+    }
 
-        if (configClass != null) {
-            try {
-                ModemPppConfigGenerator scriptGenerator = configClass.newInstance();
-
-                if (modemConfig != null) {
-                    logger.debug("Writing connect scripts for {} using {}", modemInterfaceConfig.getName(),
-                            configClass);
-
-                    logger.debug(WRITING, pppPeerFilename);
-                    PppPeer pppPeer = scriptGenerator.getPppPeer(getDeviceId(usbDevice), modemConfig, pppLogfile,
-                            chatFilename, disconnectFilename);
-                    pppPeer.setBaudRate(baudRate);
-                    pppPeer.write(pppPeerFilename, chapAuthSecretsFilename, papAuthSecretsFilename);
-
-                    if (pppNum >= 0) {
-                        logger.debug("Linking peer file using ppp number: {}", pppNum);
-                        String symlinkFilename = formPeerLinkAbsoluteName(pppNum);
-                        LinuxFileUtil.createSymbolicLink(pppPeerFilename, symlinkFilename);
-                    } else {
-                        logger.error("Can't create symbolic link to {}, invalid ppp number: {}", pppPeerFilename,
-                                pppNum);
-                    }
-
-                    logger.debug(WRITING, chatFilename);
-                    ModemXchangeScript connectScript = scriptGenerator.getConnectScript(modemConfig);
-                    connectScript.writeScript(chatFilename);
-
-                    logger.debug(WRITING, disconnectFilename);
-                    ModemXchangeScript disconnectScript = scriptGenerator.getDisconnectScript(modemConfig);
-                    disconnectScript.writeScript(disconnectFilename);
-                } else {
-                    logger.error("Error writing connect scripts - modemConfig is null");
-                }
-            } catch (Exception e) {
-                logger.error("Could not write modem config", e);
-            }
+    private ModemConfig getModemConfig(ModemInterfaceConfigImpl modemInterfaceConfig) {
+        // Get the config
+        ModemConfig modemConfig = null;
+        List<NetConfig> netConfigs = modemInterfaceConfig.getNetConfigs();
+        Optional<NetConfig> netConfig = netConfigs.stream().filter(ModemConfig.class::isInstance).findFirst();
+        if (netConfig.isPresent()) {
+            modemConfig = (ModemConfig) netConfig.get();
         }
+        return modemConfig;
+    }
+
+    private int getPppNumber(ModemConfig modemConfig) {
+        int pppNum = -1;
+        if (modemConfig != null) {
+            pppNum = modemConfig.getPppNumber();
+        }
+        return pppNum;
     }
 
     public String formPeerFilename(UsbDevice usbDevice) {
