@@ -1290,7 +1290,7 @@ public class NetworkConfiguration {
             password = new Password("");
         } else {
             throw new KuraException(KuraErrorCode.CONFIGURATION_ATTRIBUTE_INVALID, "Invalid password type.", key,
-                    psswdObj != null ? psswdObj.getClass() : null);
+                    psswdObj.getClass());
         }
         return password;
     }

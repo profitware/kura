@@ -36,10 +36,8 @@ import org.eclipse.kura.executor.CommandExecutorService;
 import org.eclipse.kura.executor.CommandStatus;
 import org.eclipse.kura.linux.net.wifi.WpaSupplicantManager;
 import org.eclipse.kura.net.NetConfig;
-import org.eclipse.kura.net.NetConfigIP4;
 import org.eclipse.kura.net.NetInterfaceAddressConfig;
 import org.eclipse.kura.net.NetInterfaceConfig;
-import org.eclipse.kura.net.NetInterfaceStatus;
 import org.eclipse.kura.net.NetInterfaceType;
 import org.eclipse.kura.net.admin.visitor.linux.util.WpaSupplicantUtil;
 import org.eclipse.kura.net.wifi.WifiCiphers;
@@ -134,7 +132,6 @@ public class WpaSupplicantConfigWriter implements NetworkConfigurationVisitor {
                 .getNetInterfaceAddressConfig();
         if (netInterfaceAddressConfig instanceof WifiInterfaceAddressConfigImpl) {
             List<NetConfig> netConfigs = netInterfaceAddressConfig.getConfigs();
-            NetInterfaceStatus netInterfaceStatus = NetInterfaceStatus.netIPv4StatusDisabled;
             WifiMode wifiMode = ((WifiInterfaceAddressConfigImpl) netInterfaceAddressConfig).getMode();
             WifiConfig infraConfig = null;
             WifiConfig adhocConfig = null;
@@ -148,8 +145,6 @@ public class WpaSupplicantConfigWriter implements NetworkConfigurationVisitor {
                         } else if (((WifiConfig) netConfig).getMode() == WifiMode.INFRA) {
                             infraConfig = (WifiConfig) netConfig;
                         }
-                    } else if (netConfig instanceof NetConfigIP4) {
-                        netInterfaceStatus = ((NetConfigIP4) netConfig).getStatus();
                     }
                 }
             }
@@ -161,15 +156,14 @@ public class WpaSupplicantConfigWriter implements NetworkConfigurationVisitor {
             }
 
             // Choose which config to write
-            WifiConfig wpaSupplicantConfig = chooseConfig(interfaceName, wifiMode, infraConfig, adhocConfig);
+            WifiConfig wpaSupplicantConfig = chooseConfig(wifiMode, infraConfig, adhocConfig);
 
             // Write the config
             writeAndMoveFile(interfaceName, wpaSupplicantConfig);
         }
     }
 
-    private WifiConfig chooseConfig(String interfaceName, WifiMode wifiMode, WifiConfig infraConfig,
-            WifiConfig adhocConfig) throws KuraException {
+    private WifiConfig chooseConfig(WifiMode wifiMode, WifiConfig infraConfig, WifiConfig adhocConfig) {
 
         WifiConfig wpaSupplicantConfig = null;
 
@@ -206,7 +200,7 @@ public class WpaSupplicantConfigWriter implements NetworkConfigurationVisitor {
         try {
             if (wpaSupplicantConfig != null) {
                 logger.debug("Writing wifiConfig: {}", wpaSupplicantConfig);
-                generateWpaSupplicantConf(wpaSupplicantConfig, interfaceName, getTemporaryConfigFile());
+                generateWpaSupplicantConf(wpaSupplicantConfig, getTemporaryConfigFile());
                 moveWpaSupplicantConf(interfaceName, getTemporaryConfigFile());
             }
         } catch (Exception e) {
@@ -218,8 +212,7 @@ public class WpaSupplicantConfigWriter implements NetworkConfigurationVisitor {
     /*
      * This method generates the wpa_supplicant configuration file
      */
-    private void generateWpaSupplicantConf(WifiConfig wifiConfig, String interfaceName, String configFile)
-            throws KuraException, IOException {
+    private void generateWpaSupplicantConf(WifiConfig wifiConfig, String configFile) throws KuraException, IOException {
 
         logger.debug("Generating WPA Supplicant Config");
 
