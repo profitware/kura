@@ -32,6 +32,8 @@ import org.eclipse.kura.core.net.modem.ModemInterfaceConfigImpl;
 import org.eclipse.kura.net.IP4Address;
 import org.eclipse.kura.net.IPAddress;
 import org.eclipse.kura.net.NetConfig;
+import org.eclipse.kura.net.NetConfigIP4;
+import org.eclipse.kura.net.NetInterfaceStatus;
 import org.eclipse.kura.net.modem.ModemConfig;
 import org.eclipse.kura.net.modem.ModemConfig.PdpType;
 import org.eclipse.kura.net.modem.ModemInterfaceAddressConfig;
@@ -55,26 +57,38 @@ public class PppConfigTest {
 
     @Test
     public void shouldWritePeersFile() throws KuraException, IOException {
+        givenFoldersClean();
         givenPppConfigWriter();
         givenNetworkConfigurationWithPpp(PPP2);
+
         whenPppIsVisited();
-        thenPppPeersFileIsWritten();
+
+        thenPppPeersFileExists();
+        thenPppPeersFileIsCorrect();
     }
 
     @Test
     public void shouldWriteChatScriptFile() throws KuraException, IOException {
+        givenFoldersClean();
         givenPppConfigWriter();
         givenNetworkConfigurationWithPpp(PPP2);
+
         whenPppIsVisited();
-        thenPppChatScriptFileIsWritten();
+
+        thenPppChatScriptFileExists();
+        thenPppChatScriptFileIsCorrect();
     }
 
     @Test
     public void shouldWriteDisconnectScriptFile() throws KuraException, IOException {
+        givenFoldersClean();
         givenPppConfigWriter();
         givenNetworkConfigurationWithPpp(PPP2);
+
         whenPppIsVisited();
-        thenPppDisconnectScriptFileIsWritten();
+
+        thenPppDisconnectScriptFileExists();
+        thenPppDisconnectScriptFileIsCorrect();
     }
 
     @Test
@@ -181,6 +195,19 @@ public class PppConfigTest {
         };
     }
 
+    private void givenFoldersClean() {
+        deleteAllFilesInFolder(new File(PPP_DIR + PPP_PEERS_DIR));
+        deleteAllFilesInFolder(new File(PPP_DIR + PPP_SCRIPTS_DIR));
+    }
+
+    private void deleteAllFilesInFolder(File folder) {
+        for (File file : folder.listFiles()) {
+            if (!file.isDirectory()) {
+                file.delete();
+            }
+        }
+    }
+
     private void givenNetworkConfigurationWithPpp(String interfaceName) throws UnknownHostException {
         this.config = new NetworkConfiguration();
 
@@ -207,6 +234,9 @@ public class PppConfigTest {
         modemConfig.setDialString("atd*99***4#");
         netConfigs.add(modemConfig);
 
+        NetConfigIP4 netConfigIP4 = new NetConfigIP4(NetInterfaceStatus.netIPv4StatusEnabledWAN, true);
+        netConfigs.add(netConfigIP4);
+
         modemInterfaceAddressConfig.setNetConfigs(netConfigs);
         interfaceAddressConfigs.add(modemInterfaceAddressConfig);
         netInterfaceConfig.setNetInterfaceAddresses(interfaceAddressConfigs);
@@ -216,7 +246,12 @@ public class PppConfigTest {
         this.writer.visit(this.config);
     }
 
-    private void thenPppPeersFileIsWritten() throws IOException {
+    private void thenPppPeersFileExists() throws IOException {
+        File f = new File(PPP_DIR + PPP_PEERS_DIR + MODEM_MODEL + "_" + USB_BUS_NUMBER + "-" + USB_DEVICE_PATH);
+        assertTrue(f.exists());
+    }
+
+    private void thenPppPeersFileIsCorrect() throws IOException {
         String peersFileContent = readFile(
                 PPP_DIR + PPP_PEERS_DIR + MODEM_MODEL + "_" + USB_BUS_NUMBER + "-" + USB_DEVICE_PATH);
 
@@ -230,7 +265,13 @@ public class PppConfigTest {
         expectedPeersFileContent.forEach(s -> assertTrue(peersFileContent.contains(s)));
     }
 
-    private void thenPppChatScriptFileIsWritten() throws IOException {
+    private void thenPppChatScriptFileExists() throws IOException {
+        File f = new File(
+                PPP_DIR + PPP_SCRIPTS_DIR + "chat_" + MODEM_MODEL + "_" + USB_BUS_NUMBER + "-" + USB_DEVICE_PATH);
+        assertTrue(f.exists());
+    }
+
+    private void thenPppChatScriptFileIsCorrect() throws IOException {
         String chatFileContent = readFile(
                 PPP_DIR + PPP_SCRIPTS_DIR + "chat_" + MODEM_MODEL + "_" + USB_BUS_NUMBER + "-" + USB_DEVICE_PATH);
 
@@ -243,7 +284,13 @@ public class PppConfigTest {
         expectedChatFileContent.forEach(s -> assertTrue(chatFileContent.contains(s.trim())));
     }
 
-    private void thenPppDisconnectScriptFileIsWritten() throws IOException {
+    private void thenPppDisconnectScriptFileExists() throws IOException {
+        File f = new File(
+                PPP_DIR + PPP_SCRIPTS_DIR + "disconnect_" + MODEM_MODEL + "_" + USB_BUS_NUMBER + "-" + USB_DEVICE_PATH);
+        assertTrue(f.exists());
+    }
+
+    private void thenPppDisconnectScriptFileIsCorrect() throws IOException {
         String disconnectFileContent = readFile(
                 PPP_DIR + PPP_SCRIPTS_DIR + "disconnect_" + MODEM_MODEL + "_" + USB_BUS_NUMBER + "-" + USB_DEVICE_PATH);
 
