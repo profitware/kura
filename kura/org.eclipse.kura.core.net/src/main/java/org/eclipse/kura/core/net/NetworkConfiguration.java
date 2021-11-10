@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2011, 2020 Eurotech and/or its affiliates and others
+ * Copyright (c) 2011, 2021 Eurotech and/or its affiliates and others
  * 
  * This program and the accompanying materials are made
  * available under the terms of the Eclipse Public License 2.0
@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.StringTokenizer;
 
@@ -1556,20 +1557,42 @@ public class NetworkConfiguration {
         }
     }
 
-    public void populateNetInterfaceConfiguration(
-            AbstractNetInterface<? extends NetInterfaceAddressConfig> netInterfaceConfig, Map<String, Object> props)
-            throws UnknownHostException, KuraException {
-        String interfaceName = netInterfaceConfig.getName();
+    private Optional<NetInterfaceType> getInterfaceType(
+            AbstractNetInterface<? extends NetInterfaceAddressConfig> netInterfaceConfig, Map<String, Object> props) {
+        Optional<NetInterfaceType> interfaceType = Optional.empty();
 
+        String interfaceName = netInterfaceConfig.getName();
         StringBuilder keyBuffer = new StringBuilder();
         keyBuffer.append("net.interface.").append(interfaceName).append(".type");
         Object type = props.get(keyBuffer.toString());
         if (type == null) {
-            logger.debug("Interface {} not found in properties.", interfaceName);
+            logger.debug("Interface {} type not found in properties. Try to infer it from the object class.",
+                    interfaceName);
+            if (netInterfaceConfig instanceof EthernetInterfaceConfigImpl) {
+                interfaceType = Optional.of(NetInterfaceType.ETHERNET);
+            } else if (netInterfaceConfig instanceof WifiInterfaceConfigImpl) {
+                interfaceType = Optional.of(NetInterfaceType.WIFI);
+            } else if (netInterfaceConfig instanceof LoopbackInterfaceConfigImpl) {
+                interfaceType = Optional.of(NetInterfaceType.LOOPBACK);
+            } else if (netInterfaceConfig instanceof ModemInterfaceConfigImpl) {
+                interfaceType = Optional.of(NetInterfaceType.MODEM);
+            }
+        } else {
+            interfaceType = Optional.of(NetInterfaceType.valueOf((String) type));
+        }
+        return interfaceType;
+    }
+
+    public void populateNetInterfaceConfiguration(
+            AbstractNetInterface<? extends NetInterfaceAddressConfig> netInterfaceConfig, Map<String, Object> props)
+            throws UnknownHostException, KuraException {
+        String interfaceName = netInterfaceConfig.getName();
+        Optional<NetInterfaceType> interfaceTypeOptional = getInterfaceType(netInterfaceConfig, props);
+        if (!interfaceTypeOptional.isPresent()) {
+            logger.debug("Interface {} type not found.", interfaceName);
             return;
         }
-        NetInterfaceType interfaceType = NetInterfaceType.valueOf((String) type);
-        logger.trace("Populating interface: {} of type {}", interfaceName, interfaceType);
+        NetInterfaceType interfaceType = interfaceTypeOptional.get();
 
         // build the prefixes for all the properties associated with this interface
         StringBuilder sbPrefix = new StringBuilder();
