@@ -34,6 +34,8 @@ import org.eclipse.kura.linux.net.dhcp.DhcpServerTool;
 import org.eclipse.kura.net.IP4Address;
 import org.eclipse.kura.net.IPAddress;
 import org.eclipse.kura.net.NetConfig;
+import org.eclipse.kura.net.NetConfigIP4;
+import org.eclipse.kura.net.NetInterfaceStatus;
 import org.eclipse.kura.net.dhcp.DhcpServerCfg;
 import org.eclipse.kura.net.dhcp.DhcpServerCfgIP4;
 import org.eclipse.kura.net.dhcp.DhcpServerConfig4;
@@ -117,6 +119,9 @@ public class DhcpConfigTest {
                 dnsServers);
         DhcpServerConfig4 netConfig = new DhcpServerConfigIP4(svrCfg, svrCfg4);
         netConfigs.add(netConfig);
+
+        NetConfigIP4 netConfigIP4 = new NetConfigIP4(NetInterfaceStatus.netIPv4StatusEnabledLAN, true);
+        netConfigs.add(netConfigIP4);
         wifiInterfaceAddressConfig.setNetConfigs(netConfigs);
         interfaceAddressConfigs.add(wifiInterfaceAddressConfig);
         netInterfaceConfig.setNetInterfaceAddresses(interfaceAddressConfigs);

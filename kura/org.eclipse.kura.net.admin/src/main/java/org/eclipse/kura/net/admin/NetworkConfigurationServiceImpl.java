@@ -13,9 +13,7 @@
 package org.eclipse.kura.net.admin;
 
 import java.util.ArrayList;
-import java.util.Dictionary;
 import java.util.HashMap;
-import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -27,7 +25,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import org.eclipse.kura.KuraErrorCode;
 import org.eclipse.kura.KuraException;
 import org.eclipse.kura.configuration.ComponentConfiguration;
-import org.eclipse.kura.configuration.KuraConfigReadyEvent;
 import org.eclipse.kura.configuration.Password;
 import org.eclipse.kura.configuration.SelfConfiguringComponent;
 import org.eclipse.kura.core.configuration.ComponentConfigurationImpl;
@@ -62,15 +59,11 @@ import org.eclipse.kura.usb.UsbModemDevice;
 import org.eclipse.kura.usb.UsbNetDevice;
 import org.eclipse.kura.usb.UsbService;
 import org.osgi.service.component.ComponentContext;
-import org.osgi.service.event.Event;
 import org.osgi.service.event.EventAdmin;
-import org.osgi.service.event.EventConstants;
-import org.osgi.service.event.EventHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class NetworkConfigurationServiceImpl
-        implements NetworkConfigurationService, SelfConfiguringComponent, EventHandler {
+public class NetworkConfigurationServiceImpl implements NetworkConfigurationService, SelfConfiguringComponent {
 
     private static final Logger logger = LoggerFactory.getLogger(NetworkConfigurationServiceImpl.class);
 
@@ -80,7 +73,6 @@ public class NetworkConfigurationServiceImpl
     private static final String CONFIG_DRIVER = ".config.driver";
     private static final String CONFIG_AUTOCONNECT = ".config.autoconnect";
     private static final String CONFIG_MTU = ".config.mtu";
-    private static final String[] EVENT_TOPICS = { KuraConfigReadyEvent.KURA_CONFIG_EVENT_READY_TOPIC };
     private static final String NET_INTERFACES = "net.interfaces";
     public static final String UNCONFIGURED_MODEM_REGEX = "^\\d+-\\d+(\\.\\d+)*$";
 
@@ -94,7 +86,6 @@ public class NetworkConfigurationServiceImpl
     private List<NetworkConfigurationVisitor> writeVisitors;
 
     private ScheduledExecutorService executorUtil;
-    private boolean firstConfig = true;
     private LinuxNetworkUtil linuxNetworkUtil;
 
     private Map<String, Object> properties;
@@ -171,23 +162,9 @@ public class NetworkConfigurationServiceImpl
     // Activation APIs
     //
     // ----------------------------------------------------------------
-    /*
-     * Do not have a default activate for this self configuring component because we are not using it at startup
-     * protected void activate(ComponentContext componentContext) {}
-     */
-
-    protected void activate(ComponentContext componentContext, Map<String, Object> properties) {
+    public void activate(ComponentContext componentContext, Map<String, Object> properties) {
         logger.debug("activate(componentContext, properties)...");
-
-        Dictionary<String, String[]> d = new Hashtable<>();
-        d.put(EventConstants.EVENT_TOPIC, EVENT_TOPICS);
-        componentContext.getBundleContext().registerService(EventHandler.class.getName(), this, d);
-
         this.executorUtil = Executors.newSingleThreadScheduledExecutor();
-
-        // this.executorUtil.schedule(() ->
-        // make sure we don't miss the setting of firstConfig
-        // NetworkConfigurationServiceImpl.this.firstConfig = false, 3, TimeUnit.MINUTES);
 
         initVisitors();
 
@@ -197,7 +174,7 @@ public class NetworkConfigurationServiceImpl
         } else {
             logger.debug("Props...{}", properties);
             this.properties = properties;
-            updated(this.properties);  // force writing config files
+            updated(this.properties);
         }
     }
 
@@ -206,7 +183,11 @@ public class NetworkConfigurationServiceImpl
         this.writeVisitors.add(LinuxWriteVisitor.getInstance());
     }
 
-    protected void deactivate(ComponentContext componentContext) {
+    protected List<NetworkConfigurationVisitor> getVisitors() {
+        return this.writeVisitors;
+    }
+
+    public void deactivate(ComponentContext componentContext) {
         logger.debug("deactivate()");
         this.writeVisitors = null;
         this.executorUtil.shutdownNow();
@@ -221,34 +202,11 @@ public class NetworkConfigurationServiceImpl
     }
 
     @Override
-    public void handleEvent(Event event) {
-        logger.debug("handleEvent - topic: {}", event.getTopic());
-        // String topic = event.getTopic();
-        // if (topic.equals(KuraConfigReadyEvent.KURA_CONFIG_EVENT_READY_TOPIC)) {
-        // this.firstConfig = false;
-        // this.executorUtil.schedule(() -> {
-        // Map<String, Object> props = new HashMap<>();
-        // EventProperties eventProps = new EventProperties(props);
-        // logger.info("postInstalledEvent() :: posting KuraNetConfigReadyEvent");
-        // NetworkConfigurationServiceImpl.this.eventAdmin
-        // .postEvent(new Event(KuraNetConfigReadyEvent.KURA_NET_CONFIG_EVENT_READY_TOPIC, eventProps));
-        // }, 5, TimeUnit.SECONDS);
-        // }
-    }
-
-    @Override
     public synchronized void setNetworkConfiguration(NetworkConfiguration networkConfiguration) throws KuraException {
         updated(networkConfiguration.getConfigurationProperties());
     }
 
     public synchronized void updated(Map<String, Object> properties) {
-        // skip the first config
-        // if (this.firstConfig) {
-        // logger.debug("Ignoring first configuration");
-        // this.firstConfig = false;
-        // return;
-        // }
-
         try {
             if (properties != null) {
                 logger.debug("new properties - updating");
@@ -275,7 +233,7 @@ public class NetworkConfigurationServiceImpl
 
                 NetworkConfiguration networkConfiguration = new NetworkConfiguration(modifiedProps);
 
-                for (NetworkConfigurationVisitor visitor : this.writeVisitors) {
+                for (NetworkConfigurationVisitor visitor : getVisitors()) {
                     visitor.setExecutorService(this.executorService);
                     networkConfiguration.accept(visitor);
                 }

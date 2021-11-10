@@ -103,8 +103,6 @@ public class NetworkConfigurationServiceImplTest {
 
         assertTrue(inited.get());
 
-        verify(bundleCtxMock, times(1)).registerService(eq(EventHandler.class.getName()), eq(svc), anyObject());
-
         ScheduledExecutorService executor = (ScheduledExecutorService) TestUtil.getFieldValue(svc, "executorUtil");
 
         assertNotNull(executor);
@@ -116,13 +114,16 @@ public class NetworkConfigurationServiceImplTest {
     }
 
     @Test
-    public void testHandleEvent() throws InterruptedException, NoSuchFieldException {
-        // test event handling and sending of a new event using the executor service
-
+    public void testPostEvent() throws InterruptedException, NoSuchFieldException {
         NetworkConfigurationServiceImpl svc = new NetworkConfigurationServiceImpl() {
 
             @Override
             protected void initVisitors() {
+            }
+
+            @Override
+            protected List<NetworkConfigurationVisitor> getVisitors() {
+                return new ArrayList<>();
             }
         };
 
@@ -138,7 +139,7 @@ public class NetworkConfigurationServiceImplTest {
 
         doAnswer(invocation -> {
             Event event = invocation.getArgumentAt(0, Event.class);
-            assertEquals("org/eclipse/kura/configuration/NetConfigEvent/READY", event.getTopic());
+            assertEquals("org/eclipse/kura/net/admin/event/NETWORK_EVENT_CONFIG_CHANGE_TOPIC", event.getTopic());
 
             posted.set(true);
 
@@ -149,50 +150,16 @@ public class NetworkConfigurationServiceImplTest {
             return null;
         }).when(eventAdminMock).postEvent(anyObject());
 
-        Map<String, Object> properties = null;
+        Map<String, Object> properties = new HashMap<>();
+        properties.put("net.interfaces", "");
 
         svc.activate(componentContextMock, properties);
-
-        Event event = new Event("org/eclipse/kura/configuration/ConfigEvent/READY", properties);
-
-        svc.handleEvent(event);
 
         synchronized (lock) {
             lock.wait(6000); // > 5s wait is necessary
         }
 
         assertTrue(posted.get());
-
-        assertFalse((boolean) TestUtil.getFieldValue(svc, "firstConfig"));
-    }
-
-    @Test
-    public void testUpdatedFirstRun() throws NoSuchFieldException {
-        // test first run 'update'
-
-        NetworkConfigurationServiceImpl svc = new NetworkConfigurationServiceImpl();
-
-        assertTrue((boolean) TestUtil.getFieldValue(svc, "firstConfig"));
-
-        svc.updated(null);
-
-        assertFalse((boolean) TestUtil.getFieldValue(svc, "firstConfig"));
-    }
-
-    @Test
-    public void testUpdatedNullProperties() throws NoSuchFieldException {
-        // test null properties 'update'
-
-        NetworkConfigurationServiceImpl svc = new NetworkConfigurationServiceImpl();
-
-        EventAdmin eventAdminMock = mock(EventAdmin.class);
-        svc.setEventAdmin(eventAdminMock);
-
-        TestUtil.setFieldValue(svc, "firstConfig", false);
-
-        svc.updated(null);
-
-        verify(eventAdminMock, never()).postEvent(anyObject());
     }
 
     @Test
@@ -209,8 +176,6 @@ public class NetworkConfigurationServiceImplTest {
 
         EventAdmin eventAdminMock = mock(EventAdmin.class);
         svc.setEventAdmin(eventAdminMock);
-
-        TestUtil.setFieldValue(svc, "firstConfig", false);
 
         Map<String, Object> properties = new HashMap<>();
         properties.put("modified.interface.names", "testIntf");
@@ -255,8 +220,6 @@ public class NetworkConfigurationServiceImplTest {
 
             return null;
         }).when(eventAdminMock).postEvent(anyObject());
-
-        TestUtil.setFieldValue(svc, "firstConfig", false);
 
         List<NetworkConfigurationVisitor> visitors = new ArrayList<>();
         NetworkConfigurationVisitor visitor = new NetworkConfigurationVisitor() {
