@@ -579,7 +579,7 @@ public class NetworkConfiguration {
                 String delim;
 
                 // revision
-                StringBuffer revisionIdBuf = new StringBuffer();
+                StringBuilder revisionIdBuf = new StringBuilder();
                 String[] revisionId = ((ModemInterface<?>) netInterfaceConfig).getRevisionId();
                 if (revisionId != null) {
                     delim = null;

@@ -331,8 +331,8 @@ public class WifiMonitorServiceImpl implements WifiClientMonitorService, EventHa
             // There are interfaces for which we need to initially check if
             // the right kernel module is loaded for the desired mode.
             // If not we treat the interface as if needing to be reconfigured.
-            if (this.first && this.wifiDriverService != null && !this.wifiDriverService
-                    .isKernelModuleLoadedForMode(interfaceName, wifiConfig.getMode())) {
+            if (this.first && this.wifiDriverService != null
+                    && !this.wifiDriverService.isKernelModuleLoadedForMode(interfaceName, wifiConfig.getMode())) {
                 logger.info("monitor() :: {} kernel module not suitable for WiFi mode {}", interfaceName,
                         wifiConfig.getMode());
                 this.first = false;
@@ -359,8 +359,7 @@ public class WifiMonitorServiceImpl implements WifiClientMonitorService, EventHa
             // This flag is changed if the interface is disabled intentionally by the code below
             boolean up = wifiState.isUp();
             boolean linkUp = wifiState.isLinkUp();
-            logger.debug("monitor() :: interfaceName={}, wifiState.isLinkUp()={}", interfaceName,
-                    wifiState.isLinkUp());
+            logger.debug("monitor() :: interfaceName={}, wifiState.isLinkUp()={}", interfaceName, wifiState.isLinkUp());
             logger.debug("monitor() :: interfaceName={}, wifiState.isUp()={}", interfaceName, wifiState.isUp());
             if (!up || !linkUp) {
                 // Either initially down or initially up and we disabled it explicitly
@@ -396,18 +395,15 @@ public class WifiMonitorServiceImpl implements WifiClientMonitorService, EventHa
                             enableInterface(wifiInterfaceConfig);
                         } else {
                             if (isAccessPointAvailable(interfaceName, wifiConfig.getSSID())) {
-                                logger.info("monitor() :: found access point - enable {} in infra mode",
-                                        interfaceName);
+                                logger.info("monitor() :: found access point - enable {} in infra mode", interfaceName);
                                 enableInterface(wifiInterfaceConfig);
                             } else {
-                                logger.warn("monitor() :: {} - access point is not available",
-                                        wifiConfig.getSSID());
+                                logger.warn("monitor() :: {} - access point is not available", wifiConfig.getSSID());
                             }
                         }
                     }
                 } catch (KuraException e) {
-                    logger.error("monitor() :: Error enabling {} interface, will try to reset wifi",
-                            interfaceName, e);
+                    logger.error("monitor() :: Error enabling {} interface, will try to reset wifi", interfaceName, e);
                     resetWifiDevice(interfaceName);
                 }
             } else {
@@ -447,7 +443,7 @@ public class WifiMonitorServiceImpl implements WifiClientMonitorService, EventHa
                     }
 
                     NetConfigIP4 netConfigIP4 = ((AbstractNetInterface<?>) wifiInterfaceConfig).getIP4config();
-                    boolean isDhcpClient = netConfigIP4 != null && netConfigIP4.isDhcp();
+                    boolean isDhcpClient = isDhcpClientEnabled(netConfigIP4);
                     boolean dhcpLeaseRenewed = false;
                     logger.debug("monitor() :: pingAccessPoint()? {}", wifiConfig.pingAccessPoint());
                     if (isDhcpClient && wifiConfig.pingAccessPoint()) {
@@ -467,18 +463,16 @@ public class WifiMonitorServiceImpl implements WifiClientMonitorService, EventHa
 
                     // Check if wifi network reconnected between monitor executions
                     InterfaceState oldState = oldStatuses.get(interfaceName);
-                    if (!dhcpLeaseRenewed && isDhcpClient && (oldState == null
-                            || oldState.getCarrierChanges() != wifiState.getCarrierChanges())) {
+                    if (!dhcpLeaseRenewed && isDhcpClient
+                            && (oldState == null || oldState.getCarrierChanges() != wifiState.getCarrierChanges())) {
                         logger.debug("monitor() :: carrier changes - renewing DHCP lease {}", interfaceName);
                         this.netAdminService.renewDhcpLease(interfaceName);
                     }
 
-                    if (isDhcpClient
-                            && netConfigIP4.getStatus().equals(NetInterfaceStatus.netIPv4StatusEnabledLAN)) {
+                    if (isDhcpClient && netConfigIP4.getStatus().equals(NetInterfaceStatus.netIPv4StatusEnabledLAN)) {
                         RouteConfig rconf = this.routeService.getDefaultRoute(interfaceName);
                         if (rconf != null) {
-                            logger.debug(
-                                    "monitor() :: {} is configured for LAN/DHCP - removing GATEWAY route ...",
+                            logger.debug("monitor() :: {} is configured for LAN/DHCP - removing GATEWAY route ...",
                                     rconf.getInterfaceName());
                             this.routeService.removeStaticRoute(rconf.getDestination(), rconf.getGateway(),
                                     rconf.getNetmask(), rconf.getInterfaceName());
@@ -486,15 +480,19 @@ public class WifiMonitorServiceImpl implements WifiClientMonitorService, EventHa
                     }
                 } else if (WifiMode.MASTER.equals(wifiConfig.getMode()) && !wifiState.isLinkUp()) {
                     // disabling interface is probably needed to handle potential driver issues.
-                    logger.warn(
-                            "monitor() :: !! Link is down for the {} in AP mode, while IP address is assigned. "
-                            + "Will disable and reenable interface ...",
-                            interfaceName);
+                    logger.warn("monitor() :: !! Link is down for the {} in AP mode, while IP address is assigned. "
+                            + "Will disable and reenable interface ...", interfaceName);
                     disableInterface(interfaceName);
                     enableInterface(wifiInterfaceConfig);
                 }
             }
         }
+    }
+
+    private boolean isDhcpClientEnabled(NetConfigIP4 netConfigIP4) {
+        return netConfigIP4 != null && netConfigIP4.isDhcp()
+                && (netConfigIP4.getStatus() == NetInterfaceStatus.netIPv4StatusEnabledLAN
+                        || netConfigIP4.getStatus() == NetInterfaceStatus.netIPv4StatusEnabledWAN);
     }
 
     private void monitorDisabledInterfaces() throws KuraException {
